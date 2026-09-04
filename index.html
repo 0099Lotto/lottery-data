@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0d1117">
+<title>Lotto 分析｜GitHub Pages</title>
+<style>
+:root{--bg:#0d1117;--panel:#161b22;--panel2:#1b222c;--line:#30363d;--text:#e6edf3;--muted:#8b949e;--accent:#2ea043;--blue:#58a6ff;--warn:#d29922;--danger:#f85149}
+*{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans TC",sans-serif}
+header{position:sticky;top:0;z-index:10;background:rgba(13,17,23,.96);border-bottom:1px solid var(--line);backdrop-filter:blur(8px)}
+.wrap{max-width:1200px;margin:auto;padding:14px 16px}.top{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.brand{font-size:20px;font-weight:800;margin-right:auto}.status{font-size:13px;color:var(--muted)}
+button,select,input{font:inherit}button{border:1px solid var(--line);background:var(--panel2);color:var(--text);border-radius:9px;padding:9px 12px;cursor:pointer}button:hover{border-color:#58a6ff}button.primary{background:var(--accent);border-color:#2ea043;color:#fff;font-weight:700}button.warn{background:#9e6a03;border-color:#d29922;color:#fff}button.danger{background:#8b1e1e;border-color:#f85149;color:#fff}.tabs{display:flex;gap:8px;margin-top:12px}.tabs button.active{background:#21262d;border-color:#58a6ff;color:#fff}
+main{max-width:1200px;margin:auto;padding:16px}.grid{display:grid;grid-template-columns:360px 1fr;gap:16px}@media(max-width:900px){.grid{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:16px}.card h3{margin:0 0 12px;font-size:16px}.sub{color:var(--muted);font-size:12px}.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.field{display:flex;flex-direction:column;gap:5px;flex:1;min-width:110px}.field label{font-size:12px;color:var(--muted)}.field input,.field select{width:100%;background:#0d1117;border:1px solid var(--line);color:var(--text);border-radius:8px;padding:8px}.switch{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid #21262d}.switch:last-child{border-bottom:0}.switch input{width:18px;height:18px}
+.numgrid{display:grid;grid-template-columns:repeat(10,1fr);gap:6px}.num{padding:7px 0;text-align:center;border:1px solid var(--line);background:#0d1117;border-radius:7px;font-weight:700}.num.sel{background:#1f6feb;border-color:#58a6ff}.num.hit{background:#238636;border-color:#2ea043}
+.pills{display:flex;gap:6px;flex-wrap:wrap}.pill{padding:5px 8px;border:1px solid var(--line);border-radius:999px;color:var(--muted);font-size:12px}.pill.on{background:#1f6feb;color:#fff;border-color:#58a6ff}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.actions button{padding:12px}.toolbar{display:flex;gap:8px;flex-wrap:wrap}.result{white-space:pre-wrap;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;background:#0d1117;border:1px solid var(--line);border-radius:10px;padding:12px;min-height:230px;overflow:auto}.statgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}@media(max-width:650px){.statgrid{grid-template-columns:repeat(2,1fr)}}.stat{background:#0d1117;border:1px solid var(--line);padding:10px;border-radius:9px}.stat b{display:block;font-size:21px}.stat span{font-size:11px;color:var(--muted)}
+.tablewrap{overflow:auto}.table{width:100%;border-collapse:collapse;font-size:13px}.table th,.table td{border-bottom:1px solid var(--line);padding:8px;text-align:left;white-space:nowrap}.ok{color:#3fb950}.bad{color:#f85149}.muted{color:var(--muted)}.hidden{display:none!important}.road{display:grid;grid-template-columns:repeat(10,minmax(22px,1fr));gap:3px}.cell{height:28px;border:1px solid #21262d;border-radius:4px;background:#0d1117;display:flex;align-items:center;justify-content:center;font-size:11px}.cell.hit{background:#238636}.cell.pred{outline:2px solid #58a6ff;outline-offset:-2px}.source{font-size:12px;color:var(--muted);word-break:break-all}.notice{background:#161b22;border:1px dashed #58a6ff;padding:10px;border-radius:9px;color:#c9d1d9;font-size:13px}.footer{color:var(--muted);font-size:11px;text-align:center;padding:20px 0}
+</style>
+</head>
+<body>
+<header><div class="wrap"><div class="top"><div class="brand">🎯 Lotto 綜合分析</div><div id="status" class="status">準備中…</div><button id="reloadBtn">重新讀取號碼</button></div><div class="tabs"><button class="tab active" data-tab="settings">⚙️ 設定</button><button class="tab" data-tab="analysis">📊 分析結果</button><button class="tab" data-tab="record">🧾 詳細記錄</button></div></div></header>
+<main>
+<section id="settings" class="tabpane">
+<div class="grid">
+<aside>
+<div class="card"><h3>彩種 / 資料</h3><div class="field"><label>彩種</label><select id="lottoType"><option value="0">台灣539</option><option value="1">天天樂</option><option value="2">大樂透</option><option value="3">六合彩</option></select></div><div style="height:8px"></div><div id="sourceInfo" class="notice">會從 index.html 同一層自動讀取 CSV。</div><div style="height:8px"></div><div id="sourcePath" class="source">./tw539.csv</div></div>
+<div class="card"><h3>分析控制</h3><div class="row"><div class="field"><label>歷史期數</label><input id="history" type="number" min="10" max="5000" value="300"></div><div class="field"><label>截止日期</label><input id="deadline" type="date"></div></div><div style="height:8px"></div><div class="row"><div class="field"><label>檢查期數</label><input id="within" value="1,2,3,4,5"></div><div class="field"><label>最少命中星數</label><input id="minHit" value="1"></div></div><div class="switch"><span>包含特別號</span><input id="includeSpecial" type="checkbox"></div><div class="switch"><span>尾數模式</span><input id="tailMode" type="checkbox"></div><div class="switch"><span>連續命中模式</span><input id="continuous" type="checkbox"></div><div class="switch"><span>定點分析</span><input id="fixedPosition" type="checkbox"></div><div class="switch"><span>最新一期到期（強制最後未中）</span><input id="forceLastMiss" type="checkbox"></div><div class="switch"><span>動態回溯拖牌</span><input id="dynamic" type="checkbox" checked></div></div>
+</aside>
+<div>
+<div class="card"><h3>當期號碼（自動帶入資料最後一期）</h3><div id="currentInfo" class="sub">尚未載入</div><div style="height:10px"></div><div id="currentNums" class="numgrid"></div><div style="height:8px"></div><div id="positionInputs" class="row"></div></div>
+<div class="card"><h3>立柱設定</h3><div class="sub">0 = 不使用。每一柱填選幾個號碼，例如 2 / 2 / 2。</div><div style="height:10px"></div><div class="row" id="columnCounts"></div><div style="height:12px"></div><div class="switch"><span>連碰指定數量</span><input id="pickMode" type="checkbox"></div><div class="field"><label>指定數量</label><input id="pickCount" type="number" min="1" max="10" value="3"></div></div>
+<div class="card"><h3>操作</h3><div class="actions"><button class="primary" id="columnBtn">立柱分析</button><button class="warn" id="compBtn">綜合分析</button><button id="backtestBtn">自動回測</button><button class="danger" id="stopBtn">停止</button></div><div style="height:10px"></div><div id="progress" class="sub">等待分析</div></div>
+</div></div>
+</section>
+<section id="analysis" class="tabpane hidden">
+<div class="statgrid"><div class="stat"><b id="sLoaded">0</b><span>載入期數</span></div><div class="stat"><b id="sCandidates">0</b><span>候選數</span></div><div class="stat"><b id="sBest">0</b><span>最佳命中</span></div><div class="stat"><b id="sStars">0</b><span>最佳星數</span></div></div>
+<div style="height:16px"></div><div class="card"><h3>分析結果</h3><div id="result" class="result">尚未分析。</div></div>
+<div class="card"><h3>預測立柱</h3><div id="predictionPills" class="pills"></div></div>
+<div class="card"><h3>版路圖</h3><div id="road" class="road"></div></div>
+<div class="card"><h3>候選明細</h3><div class="tablewrap"><table class="table"><thead><tr><th>號碼</th><th>分數</th><th>星數</th><th>最佳來源期</th><th>來源位置</th><th>預測</th></tr></thead><tbody id="detailBody"></tbody></table></div></div>
+</section>
+<section id="record" class="tabpane hidden"><div class="card"><h3>詳細記錄</h3><div id="recordBox" class="result">分析後會保留最近一次執行紀錄。</div></div></section>
+<div class="footer">GitHub Pages 單檔版｜資料來源為與 index.html 同一層的 CSV</div>
+</main>
+<script>
+const CFG={
+  0:{name:'台灣539',files:['tw539.csv'],count:5,max:39,special:false},
+  1:{name:'天天樂',files:['us539.csv'],count:5,max:39,special:false},
+  2:{name:'大樂透',files:['rk8e49.csv'],count:6,max:49,special:true},
+  3:{name:'六合彩',files:['hkmark6.csv','hmark6.csv'],count:6,max:49,special:true}
+};
+let state={type:0,data:[],running:false,stop:false,last:null};
+const $=id=>document.getElementById(id);
+function setStatus(t){$('status').textContent=t}
+function sourceFiles(){return CFG[state.type].files}
+function setSourceLabel(){ $('sourcePath').textContent=sourceFiles().map(x=>'./'+x).join(' 或 '); }
+function parseCSV(text){
+  const rows=[]; let row=[], cell='', q=false;
+  for(let i=0;i<text.length;i++){const c=text[i],n=text[i+1]; if(c==='"'){if(q&&n==='"'){cell+='"';i++}else q=!q}else if(c===','&&!q){row.push(cell);cell=''}else if((c==='\n'||c==='\r')&&!q){if(c==='\r'&&n==='\n')i++;row.push(cell);cell='';if(row.some(v=>v.trim()!==''))rows.push(row);row=[]}else cell+=c}
+  row.push(cell);if(row.some(v=>v.trim()!==''))rows.push(row); return rows;
+}
+function parseDate(s){let m=s.trim().match(/^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})$/); if(!m)return null; return new Date(Date.UTC(+m[1],+m[2]-1,+m[3]));}
+function keyDate(d){return d?d.toISOString().slice(0,10):''}
+async function fetchText(paths){let lastErr=''; for(const p of paths){try{const r=await fetch('./'+p+'?v='+Date.now(),{cache:'no-store'}); if(!r.ok)throw new Error(r.status+' '+r.statusText); return {text:await r.text(),path:p}}catch(e){lastErr=e.message}} throw new Error('找不到 CSV：'+paths.join(', ')+'；'+lastErr)}
+function parseData(text){
+  const rows=parseCSV(text); const cfg=CFG[state.type], out=[], seen=new Set();
+  for(let i=1;i<rows.length;i++){const r=rows[i]; if(r.length<cfg.count+2)continue; let d=parseDate(r[0]); if(!d)continue; if(state.type===1)d=new Date(d.getTime()+86400000); const nums=[]; for(let j=0;j<cfg.count;j++){const v=parseInt((r[j+2]||'').trim(),10); if(Number.isInteger(v))nums.push(v)} if(nums.length!==cfg.count||nums.some(n=>n<1||n>cfg.max))continue; nums.sort((a,b)=>a-b); let special=null; if(cfg.special&&r[cfg.count+2]){const v=parseInt(r[cfg.count+2].trim(),10); if(v>=1&&v<=cfg.max)special=v} const k=keyDate(d); if(seen.has(k))continue; seen.add(k); out.push({date:d,nums,special})}
+  out.sort((a,b)=>a.date-b.date); return out;
+}
+async function loadData(){
+  setSourceLabel(); setStatus('讀取號碼中…');
+  try{const got=await fetchText(sourceFiles()); state.data=parseData(got.text); if(!state.data.length)throw new Error('CSV 有檔案但沒有可解析的有效期數'); const last=state.data[state.data.length-1]; $('deadline').value=keyDate(last.date); renderCurrent(); setStatus(`已載入 ${state.data.length} 期｜${got.path}`); $('sLoaded').textContent=state.data.length;}
+  catch(e){state.data=[]; renderCurrent(); setStatus('讀取失敗：請確認 CSV 與 index.html 在同一層'); $('sourceInfo').textContent='錯誤：'+e.message+'。請把 CSV 放到 GitHub Repository 根目錄，與 index.html 同層。'}
+}
+function renderCurrent(){
+  const cfg=CFG[state.type]; const box=$('currentNums');box.innerHTML=''; const pos=$('positionInputs');pos.innerHTML='';
+  if(!state.data.length){$('currentInfo').textContent='尚未載入資料';return}
+  const d=state.data[state.data.length-1]; $('currentInfo').textContent=`最新一期：${keyDate(d.date)}${d.special?`｜特別號 ${String(d.special).padStart(2,'0')}`:''}`;
+  d.nums.forEach((n,i)=>{const x=document.createElement('div');x.className='num hit';x.textContent=String(n).padStart(2,'0');box.appendChild(x); const f=document.createElement('div');f.className='field';f.style.minWidth='72px';f.innerHTML=`<label>第${i+1}球</label><input type="number" min="1" max="${cfg.max}" data-pos="${i}" value="${n}">`;pos.appendChild(f)});
+  if(cfg.special){const f=document.createElement('div');f.className='field';f.style.minWidth='72px';f.innerHTML=`<label>特別號</label><input type="number" min="1" max="${cfg.max}" data-pos="sp" value="${d.special??''}">`;pos.appendChild(f)}
+}
+function selectedNumbers(){
+  const cfg=CFG[state.type]; const fields=[...document.querySelectorAll('#positionInputs input')]; const vals=fields.map(x=>parseInt(x.value,10)).filter(n=>n>=1&&n<=cfg.max); return [...new Set(vals)]
+}
+function getDeadlineIndex(){const v=$('deadline').value; if(!v)return state.data.length-1; let idx=-1; for(let i=0;i<state.data.length;i++)if(keyDate(state.data[i].date)<=v)idx=i; return idx}
+function setForDraw(draw){const set=new Set(draw.nums); if($('includeSpecial').checked&&draw.special)set.add(draw.special); if($('tailMode').checked)return new Set([...set].map(n=>n%10)); return set}
+function getColumnCounts(){if($('pickMode').checked){const n=Math.max(1,parseInt($('pickCount').value||'1',10));return Array(n).fill(1)} return [...document.querySelectorAll('#columnCounts input')].map(x=>Math.max(0,parseInt(x.value||'0',10))).filter(n=>n>0)}
+function progress(t){$('progress').textContent=t}
+function extractValue(draw,pos){const vals=draw.nums.slice(); if(pos<vals.length)return vals[pos]; if(pos===vals.length)return draw.special; return null}
+function buildPatterns(valid, currentIdx, targetNum){
+  const within=[...new Set($('within').value.split(',').map(x=>parseInt(x.trim(),10)).filter(x=>x>0))]; const posCount=CFG[state.type].count+(CFG[state.type].special?1:0); const patterns=[]; const idxs=[];
+  for(let i=currentIdx-1;i>=0;i--){const d=valid[i]; const s=setForDraw(d); const nums=d.nums; const hit=($('tailMode').checked?nums.map(n=>n%10):nums).includes($('tailMode').checked?targetNum:targetNum)||($('includeSpecial').checked&&d.special===targetNum); if(hit)idxs.push(i)}
+  if(!idxs.length)return {score:0,patterns:[]};
+  for(let back=1;back<=5;back++)for(let pos=0;pos<posCount;pos++){let streak=0; for(const i of idxs){let ok=false; for(const off of within){const ci=i+off;if(ci<valid.length){const v=extractValue(valid[Math.max(0,i-back)],pos); if(v!=null){const val=$('tailMode').checked?v%10:v; if(setForDraw(valid[ci]).has(val))ok=true}}} if(ok)streak++;else if($('continuous').checked)break} patterns.push({score:streak,back,pos})}
+  patterns.sort((a,b)=>b.score-a.score||a.back-b.back||a.pos-b.pos);return {score:patterns[0]?.score||0,patterns:patterns.slice(0,Math.max(1,parseInt($('pickCount').value||'1',10)))}
+}
+function searchCombinations(counts,max,tail){
+  const total=counts.reduce((a,b)=>a+b,0), universe=[...Array(tail?10:max)].map((_,i)=>tail?i:i+1); const tries=2500; let best=null;
+  const targetCandidates=selectedNumbers(); const end=getDeadlineIndex(); const valid=state.data.slice(Math.max(0,end-300),end+1); const within=[...new Set($('within').value.split(',').map(x=>parseInt(x.trim(),10)).filter(x=>x>0))]; const minHits=[...new Set($('minHit').value.split(',').map(x=>parseInt(x.trim(),10)).filter(x=>x>=1))]; const minHit=Math.min(...(minHits.length?minHits:[1]));
+  const scoreColumns=(cols)=>{let score=0,stars=0; for(const cand of targetCandidates){let sc=0,st=0; for(let i=0;i<valid.length;i++){if(!setForDraw(valid[i]).has($('tailMode').checked?cand:cand))continue; let dayStars=0; for(const off of within){const j=i+off;if(j>=valid.length)break;let hits=0;for(const col of cols)if([...col].some(n=>setForDraw(valid[j]).has(n)))hits++;if(hits>=minHit){sc++;st+=hits;dayStars+=hits;}} if($('continuous').checked&&sc===0)break} if(best?.skip){} score+=sc;stars+=st}return {score,stars}}
+  function buildRandom(){const pool=universe.slice();const out=[]; for(const c of counts){const arr=[];while(arr.length<c&&pool.length){const k=Math.floor(Math.random()*pool.length);arr.push(pool.splice(k,1)[0])}out.push(arr.sort((a,b)=>a-b))} return out}
+  for(let t=0;t<tries;t++){if(state.stop)break; const cols=buildRandom(); const sc=scoreColumns(cols); if(!best||sc.score>best.score||(sc.score===best.score&&sc.stars>best.stars))best={cols,...sc}}
+  return best||{cols:[],score:0,stars:0};
+}
+function runColumn(){
+  if(!state.data.length)throw new Error('沒有資料'); state.stop=false; const end=getDeadlineIndex(); if(end<0)throw new Error('截止日前沒有資料'); const counts=getColumnCounts(); if(!counts.length)throw new Error('請至少設定一柱'); const targets=selectedNumbers(); if(!targets.length)throw new Error('請至少保留一個分析號碼');
+  const valid=state.data.slice(0,Math.min(end+1,Math.max(10,parseInt($('history').value||300,10)))); const results=[]; const posCount=CFG[state.type].count+(CFG[state.type].special?1:0);
+  targets.forEach((n,ii)=>{const pat=buildPatterns(valid,valid.length-1,n); const pred=new Set(); pat.patterns.forEach(p=>{const src=valid.length-1-p.back; if(src>=0){const raw=extractValue(valid[src],p.pos);if(raw!=null)pred.add($('tailMode').checked?raw%10:raw)}});results.push({num:n,score:pat.score,stars:pat.score,pred:[...pred].sort((a,b)=>a-b),patterns:pat.patterns}) ;progress(`立柱分析 ${ii+1}/${targets.length}`)});
+  const flat=[...new Set(results.flatMap(x=>x.pred))]; const best=Math.max(0,...results.map(x=>x.score)); const stars=Math.max(0,...results.map(x=>x.stars)); state.last={mode:'column',end,results,prediction:flat}; renderResults(results,flat,best,stars); progress('立柱分析完成');
+}
+function runComprehensive(){
+  if(!state.data.length)throw new Error('沒有資料'); state.stop=false; const counts=getColumnCounts(); if(!counts.length)throw new Error('請至少設定一柱'); progress('綜合分析搜尋中…'); const best=searchCombinations(counts,$('tailMode').checked?10:CFG[state.type].max,$('tailMode').checked); const targets=selectedNumbers(); const rows=targets.map(n=>({num:n,score:best.score,stars:best.stars,pred:best.cols.flat(),patterns:[]})); const pred=[...new Set(best.cols.flat())].sort((a,b)=>a-b); state.last={mode:'comprehensive',end:getDeadlineIndex(),results:rows,prediction:pred}; renderResults(rows,pred,best.score,best.stars); progress(`綜合分析完成｜最佳組合 ${best.cols.map(c=>'('+c.join('、')+')').join(' ')}`)
+}
+function renderResults(results,pred,best,stars){$('sCandidates').textContent=results.length;$('sBest').textContent=best;$('sStars').textContent=stars;$('result').textContent=JSON.stringify(state.last,null,2);$('predictionPills').innerHTML=''; (pred.length?pred:[].concat()).forEach(n=>{const d=document.createElement('span');d.className='pill on';d.textContent=$( 'tailMode').checked?`${n}尾`:String(n).padStart(2,'0');$('predictionPills').appendChild(d)}); const body=$('detailBody');body.innerHTML=''; const valid=state.data; results.forEach(r=>{const tr=document.createElement('tr');const p=r.patterns?.[0];tr.innerHTML=`<td>${String(r.num).padStart(2,'0')}</td><td>${r.score}</td><td>${r.stars}</td><td>${p&&valid[valid.length-1-p.back]?keyDate(valid[valid.length-1-p.back].date):'-'}</td><td>${p?((p.pos===CFG[state.type].count)?'特別號':'第'+(p.pos+1)+'球'):'-'}</td><td>${r.pred?.join('、')||'-'}</td>`;body.appendChild(tr)});drawRoad();$('recordBox').textContent=new Date().toLocaleString()+'\n'+JSON.stringify(state.last,null,2);showTab('analysis')}
+function drawRoad(){const box=$('road');box.innerHTML=''; if(!state.data.length)return; const vals=state.data.slice(-120);const pred=new Set(state.last?.prediction||[]); vals.forEach(d=>{for(const n of d.nums){const c=document.createElement('div');c.className='cell'+(pred.has($('tailMode').checked?n%10:n)?' pred':'');c.textContent=String($('tailMode').checked?n%10:n).padStart(2,'0');box.appendChild(c)}})}
+function autoBacktest(){if(!state.data.length)throw new Error('沒有資料'); const n=Math.min(30,state.data.length-15);let hit=0,total=0;const backup=$('deadline').value; for(let k=n;k>0;k--){const idx=state.data.length-k-1;if(idx<10)continue;$('deadline').value=keyDate(state.data[idx].date); try{const res=backtestOne(idx); hit+=res.hit?1:0;total++}catch{} progress(`回測 ${total}/${n}`)} $('deadline').value=backup||keyDate(state.data[state.data.length-1].date); $('result').textContent=`自動回測完成\n\n總期數：${total}\n命中：${hit}\n未中：${total-hit}\n命中率：${total?((hit/total)*100).toFixed(2):'0.00'}%`;$('recordBox').textContent=$('result').textContent;showTab('analysis');progress('回測完成')}
+function backtestOne(idx){const d=state.data[idx+1];const targets=selectedNumbers();if(!targets.length)return{hit:false};const within=[...new Set($('within').value.split(',').map(x=>parseInt(x.trim(),10)).filter(x=>x>0))];const base=state.data.slice(0,idx+1);let preds=[];for(const n of targets){const p=buildPatterns(base,base.length-1,n).patterns?.[0];if(p){const src=base.length-1-p.back;if(src>=0){const v=extractValue(base[src],p.pos);if(v!=null)preds.push($('tailMode').checked?v%10:v)}}}const actual=setForDraw(d);return{hit:preds.some(x=>actual.has(x))}}
+function showTab(name){document.querySelectorAll('.tabpane').forEach(x=>x.classList.toggle('hidden',x.id!==name));document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x.dataset.tab===name))}
+for(const b of document.querySelectorAll('.tab'))b.onclick=()=>showTab(b.dataset.tab);
+$('lottoType').onchange=()=>{state.type=+$('lottoType').value; loadData()};$('reloadBtn').onclick=loadData;
+$('columnBtn').onclick=()=>{try{runColumn()}catch(e){progress('錯誤：'+e.message);setStatus(e.message)}}; $('compBtn').onclick=()=>{try{runComprehensive()}catch(e){progress('錯誤：'+e.message);setStatus(e.message)}}; $('backtestBtn').onclick=()=>{try{autoBacktest()}catch(e){progress('錯誤：'+e.message);setStatus(e.message)}}; $('stopBtn').onclick=()=>{state.stop=true;progress('已要求停止')};
+for(const id of ['includeSpecial','tailMode','continuous','fixedPosition','forceLastMiss','dynamic','pickMode'])$(id).onchange=()=>{renderCurrent();};
+(function init(){const now=new Date();$('deadline').value=now.toISOString().slice(0,10);for(let i=0;i<5;i++){const d=document.createElement('div');d.className='field';d.innerHTML=`<label>柱${i+1}</label><input type="number" min="0" max="10" value="${i===0?2:0}">`;$('columnCounts').appendChild(d)}loadData()})();
+</script>
+</body></html>

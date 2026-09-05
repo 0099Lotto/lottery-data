@@ -3,6 +3,7 @@ name: Keep Alive
 on:
   schedule:
     - cron: '0 0 1,10,20 * *'
+  workflow_dispatch: # 讓你可以隨時手動點擊測試
 
 jobs:
   keep-alive:
@@ -10,11 +11,15 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          # 套用剛才設定好的 GH_PAT 金鑰
+          token: ${{ secrets.GH_PAT }}
 
       - name: Keep active
         run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          # 帶入你的 GitHub 帳號名稱與 Email
+          git config --global user.name "0099Lotto"
+          git config --global user.email "good750910@gmail.com"
           date > keep-alive.txt
           git add keep-alive.txt
           git commit -m "Keep-alive: prevent inactivity timeout" || exit 0

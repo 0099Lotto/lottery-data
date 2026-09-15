@@ -6949,6 +6949,278 @@ class LottoEngine:
 
 
 
+
+# ---------------------------------------------------------------------------
+# 智能彩引：歷史回測評分 / 冠軍嚴選 / 下期驗證
+# ---------------------------------------------------------------------------
+def _smart_next_draws(eng, eval_date):
+    rows = [r for r in eng.data if r[0] > eval_date]
+    return rows
+
+
+def _smart_evaluate_hit(eng, r, next_draws):
+    """網頁版等價於原始 App evaluate_hit() 的純運算版本。"""
+    if not next_draws:
+        return False, [], [], True
+
+    pred_range = r.get('pred_range', 0)
+    mode = r.get('mode', 0)
+    draws = list(next_draws)
+    if mode == 15:
+        wd = r.get('weekday')
+        if isinstance(wd, int) and 0 <= wd <= 6:
+            draws = [row for row in draws if row[0].weekday() == wd]
+
+    try:
+        date_route_eval_count = int(r.get('date_route_eval_count', 0) or 0)
+    except Exception:
+        date_route_eval_count = 0
+    if mode == 16 and date_route_eval_count > 0:
+        check_count = date_route_eval_count
+    else:
+        check_count = 1 if pred_range in (3, 4) else get_pred_range_count(pred_range)
+
+    valid_draws = list(draws[:check_count])
+    is_pending = len(valid_draws) < check_count
+    if not valid_draws:
+        return False, [], [], True
+
+    has_special = bool(eng.has_special.get(eng.lotto_type, False))
+    lock_special = bool(r.get('lock_special', False) and has_special)
+    special_tiandi_mode = bool(
+        r.get('special_tiandi_mode', False)
+        or (lock_special and int(r.get('min_hit_req', 1) or 1) >= 2
+            and not r.get('is_tail_match', False)
+            and not r.get('is_tail_drag', False)
+            and not r.get('is_non_hit', False))
+    )
+
+    def draw_nums(row):
+        if lock_special and not special_tiandi_mode:
+            return {row[2]} if row[2] is not None else set()
+        out = set(row[1])
+        if has_special and row[2] is not None:
+            out.add(row[2])
+        return out
+
+    req = int(r.get('min_hit_req', 1) or 1)
+    is_non_hit = bool(r.get('is_non_hit', False))
+    is_tail = bool(r.get('is_tail_match', False))
+
+    if special_tiandi_mode:
+        pred_set = set(r.get('latest_pred_nums', []) or [])
+        for nd in valid_draws:
+            sp = nd[2] if has_special else None
+            inner = sorted(set(nd[1]) & pred_set)
+            special_hit = sp is not None and sp in pred_set
+            need_inner = max(1, req - 1)
+            hits = ([sp] if special_hit else []) + inner
+            if special_hit and len(inner) >= need_inner:
+                return True, sorted(set(hits)), valid_draws, is_pending
+        return False, [], valid_draws, is_pending
+
+    # 立柱熱門 / 每月週牌 / 日期版路：星數是命中的柱數
+    if mode in (9, 10, 16):
+        pillars = r.get('pillars', []) or []
+        pillar_sets = []
+        pillar_tail_sets = []
+        for pillar in pillars:
+            if not pillar:
+                continue
+            if is_tail:
+                pillar_tail_sets.append({int(n) % 10 for n in pillar})
+            else:
+                pillar_sets.append(set(int(n) for n in pillar))
+        all_nums = set().union(*pillar_sets) if pillar_sets else set()
+        all_tails = set().union(*pillar_tail_sets) if pillar_tail_sets else set()
+        broken = False
+        for nd in valid_draws:
+            nums = draw_nums(nd)
+            if is_tail:
+                draw_tails = {n % 10 for n in nums}
+                hit_nums = sorted(n for n in nums if n % 10 in all_tails)
+                stars = sum(1 for pset in pillar_tail_sets if pset and (draw_tails & pset))
+            else:
+                hit_nums = sorted(n for n in nums if n in all_nums)
+                stars = sum(1 for pset in pillar_sets if pset and (nums & pset))
+            if is_non_hit:
+                if stars > 0:
+                    broken = True
+                    break
+            elif stars >= req:
+                return True, sorted(set(hit_nums)), valid_draws, False
+        return (not broken) if is_non_hit else False, [], valid_draws, is_pending
+
+    pred_nums = tuple(int(x) for x in (r.get('latest_pred_nums', []) or []))
+    pred_set = set(pred_nums)
+    pred_tails = {x % 10 for x in pred_nums}
+    broken = False
+    for nd in valid_draws:
+        nums = draw_nums(nd)
+        if is_tail:
+            hits = sorted(n for n in nums if n % 10 in pred_tails)
+            hit_count = len({n % 10 for n in nums} & pred_tails)
+        else:
+            hits = sorted(n for n in nums if n in pred_set)
+            hit_count = len(nums & pred_set)
+        if is_non_hit:
+            if hit_count > 0:
+                broken = True
+                break
+        elif hit_count >= req:
+            return True, sorted(set(hits)), valid_draws, False
+    return (not broken) if is_non_hit else False, [], valid_draws, is_pending
+
+
+def _smart_reason(st):
+    if st['current_miss'] >= st['max_miss'] and st['max_miss'] > 0:
+        return '⚠️ 已達歷史連漏極限，看好強烈反彈!'
+    if st['current_miss'] == 0:
+        return '🔥 版路正熱，順勢乘勝追擊!'
+    if st['current_miss'] >= st['avg_interval']:
+        return '📈 已超過平均週期，隨時準備爆發!'
+    return f"⭐ 綜合評分優異，整體勝率達 {st['hit_rate_pct']:.1f}%!"
+
+
+def run_smart_recommendation(eng, current_top, params, limit_date, lookback=20, target_count=5):
+    """依原 App 冠軍分析邏輯做純 Python 網頁版回測，避免 UI/iOS 依賴。"""
+    current_top = list(current_top or [])
+    if not current_top:
+        return {'ok': True, 'lookback': 0, 'recommendations': [], 'champions': [], 'nextDraws': []}
+
+    try:
+        lookback = max(5, min(50, int(lookback or 20)))
+    except Exception:
+        lookback = 20
+    try:
+        target_count = max(1, min(5, int(target_count or 5)))
+    except Exception:
+        target_count = 5
+
+    eval_dates = []
+    for row in reversed(eng.data):
+        if row[0] <= limit_date:
+            eval_dates.append(row[0])
+            if len(eval_dates) >= lookback:
+                break
+    # 最新基準日不拿自己做歷史命中統計
+    historical_dates = eval_dates[1:]
+
+    bt_results = []
+    for eval_date in historical_dates:
+        try:
+            hist_top, _ = eng.execute_analysis_for_date(eval_date, True, params, progress_callback=None)
+        except Exception:
+            hist_top = []
+        bt_results.append((eval_date, hist_top))
+
+    num_routes = len(current_top)
+    stats = {i: {'total': 0, 'hits': 0, 'current_miss': 0, 'max_miss': 0} for i in range(num_routes)}
+
+    for eval_date, top in reversed(bt_results):
+        if not top:
+            continue
+        nd = _smart_next_draws(eng, eval_date)
+        for i in range(num_routes):
+            if i >= len(top):
+                continue
+            try:
+                is_hit, _, valid_draws, is_pending = _smart_evaluate_hit(eng, top[i], nd)
+            except Exception:
+                continue
+            if not valid_draws or is_pending:
+                continue
+            st = stats[i]
+            st['total'] += 1
+            if is_hit:
+                st['hits'] += 1
+                st['current_miss'] = 0
+            else:
+                st['current_miss'] += 1
+                st['max_miss'] = max(st['max_miss'], st['current_miss'])
+
+    scored = []
+    for i in range(num_routes):
+        st = stats[i]
+        if st['total'] <= 0:
+            continue
+        hit_rate = st['hits'] / st['total']
+        avg_interval = st['total'] / st['hits'] if st['hits'] > 0 else st['total']
+        score_rate = min(40.0, (hit_rate / 0.4) * 40.0)
+        score_stable = max(0.0, 30.0 - (st['max_miss'] * 2.5))
+        miss_ratio = st['current_miss'] / max(1, st['max_miss'])
+        score_urgency = min(30.0, miss_ratio * 30.0)
+        if st['current_miss'] >= st['max_miss'] and st['max_miss'] > 0:
+            score_urgency += 10.0
+        score = score_rate + score_stable + score_urgency
+        st['score'] = score
+        st['avg_interval'] = avg_interval
+        st['hit_rate_pct'] = hit_rate * 100.0
+        scored.append((i, score, st))
+    scored.sort(key=lambda x: (x[1], x[2]['hit_rate_pct']), reverse=True)
+
+    score_map = {i: (score, st) for i, score, st in scored}
+    ranked = []
+    for route_idx, score, st in scored[:target_count]:
+        r = current_top[route_idx]
+        ranked.append({
+            'rank': len(ranked) + 1,
+            'routeIndex': route_idx + 1,
+            'score': round(score, 1),
+            'hitRatePct': round(st['hit_rate_pct'], 1),
+            'avgInterval': round(st['avg_interval'], 1),
+            'currentMiss': int(st['current_miss']),
+            'maxMiss': int(st['max_miss']),
+            'reason': _smart_reason(st),
+            'predNums': [int(x) for x in (r.get('latest_pred_nums') or [])],
+            'isNonHit': bool(r.get('is_non_hit', False)),
+            'isTail': bool(r.get('is_tail_match', False)),
+        })
+
+    champions = []
+    for route_idx in range(min(5, len(current_top))):
+        if route_idx not in score_map:
+            continue
+        score, st = score_map[route_idx]
+        r = current_top[route_idx]
+        champions.append({
+            'rank': len(champions) + 1,
+            'routeIndex': route_idx + 1,
+            'score': round(score, 1),
+            'hitRatePct': round(st['hit_rate_pct'], 1),
+            'avgInterval': round(st['avg_interval'], 1),
+            'currentMiss': int(st['current_miss']),
+            'maxMiss': int(st['max_miss']),
+            'predNums': [int(x) for x in (r.get('latest_pred_nums') or [])],
+            'isNonHit': bool(r.get('is_non_hit', False)),
+            'isTail': bool(r.get('is_tail_match', False)),
+        })
+
+    next_draws = _smart_next_draws(eng, limit_date)
+    verification = []
+    for item in ranked:
+        route_idx = item['routeIndex'] - 1
+        r = current_top[route_idx]
+        is_hit, hit_nums, valid_draws, is_pending = _smart_evaluate_hit(eng, r, next_draws)
+        verification.append({
+            'routeIndex': item['routeIndex'],
+            'status': 'pending' if is_pending else ('hit' if is_hit else 'miss'),
+            'hitNums': [int(x) for x in hit_nums],
+            'dates': [d[0].isoformat() for d in valid_draws],
+        })
+
+    return {
+        'ok': True,
+        'lookback': len(historical_dates),
+        'recommendations': ranked,
+        'champions': champions,
+        'verification': verification,
+        'nextDraws': [
+            {'date': row[0].isoformat(), 'numbers': [int(x) for x in row[1]], 'special': row[2]}
+            for row in next_draws[:3]
+        ],
+    }
+
 import json as _json
 
 def run_analysis_json(payload_json):
@@ -6997,12 +7269,24 @@ def run_analysis_json(payload_json):
         results = [serialize(i, it) for i, it in enumerate(top_list[:MAX_RESULTS])]
         next_results = [serialize(i, it) for i, it in enumerate(next_list[:MAX_RESULTS])]
 
+        smart = {'ok': True, 'recommendations': [], 'champions': [], 'verification': [], 'nextDraws': [], 'lookback': 0}
+        if payload.get('smartEnabled', True):
+            try:
+                smart = run_smart_recommendation(
+                    eng, top_list, params, limit_date,
+                    lookback=payload.get('smartLookback', 20),
+                    target_count=payload.get('smartTargetCount', 5),
+                )
+            except Exception as smart_err:
+                smart = {'ok': False, 'error': f'{type(smart_err).__name__}: {smart_err}', 'recommendations': [], 'champions': [], 'verification': [], 'nextDraws': [], 'lookback': 0}
+
         return _json.dumps({
             'ok': True,
             'results': results,
             'nextResults': next_results,
             'totalTop': len(top_list),
             'totalNext': len(next_list),
+            'smart': smart,
         }, ensure_ascii=False)
     except Exception as e:
         import traceback

@@ -11,6 +11,7 @@ const state = {
   },
   resultsByType: { 0: null, 1: null, 2: null, 3: null }, // 每個彩種各自存上次的分析結果
   isAnalyzing: false,
+  smartByType: { 0: null, 1: null, 2: null, 3: null },
 };
 
 const el = (sel, root = document) => root.querySelector(sel);
@@ -50,6 +51,7 @@ function setLottoType(id) {
   renderDataTab();
   renderSettingsTab();
   renderResultsTab();
+  renderSmartTab();
   updateStatusBar();
 }
 
@@ -150,8 +152,10 @@ function handleFile(file) {
       }
       state.byType[state.lottoType] = { data, skipped, fileName: file.name, uploadedAt: new Date() };
       state.resultsByType[state.lottoType] = null; // 資料變了,舊的分析結果不再有意義
+      state.smartByType[state.lottoType] = null;
       renderDataTab();
       renderResultsTab();
+      renderSmartTab();
       updateStatusBar();
       showToast(`已匯入 ${total} 筆資料`);
     } catch (err) {
@@ -245,6 +249,9 @@ async function runAnalysisFlow() {
     dataLimitIndex: getSegmentedIndex('dataLimit'),
     limitDateISO,
     excludeToday: false,
+    smartEnabled: true,
+    smartLookback: 5,
+    smartTargetCount: 5,
   };
 
   state.isAnalyzing = true;
@@ -267,9 +274,12 @@ async function runAnalysisFlow() {
       ...result,
       ranAt: new Date(),
     };
+    state.smartByType[state.lottoType] = result.smart || null;
     renderResultsTab();
-    setTab('results');
-    showToast(`分析完成,找到 ${result.totalTop} 條版路`);
+    renderSmartTab();
+    setTab('smart');
+    const smartCount = result.smart && result.smart.recommendations ? result.smart.recommendations.length : 0;
+    showToast(`分析完成 · ${result.totalTop} 條版路 · 智能彩引嚴選 ${smartCount} 條`);
   } catch (err) {
     showToast('發生錯誤:' + err.message);
     if (runStatus) runStatus.textContent = '發生錯誤:' + err.message;
@@ -321,6 +331,79 @@ function renderResultsTab() {
   `;
 }
 
+
+function smartBallHtml(nums, kind = 'normal') {
+  return (nums || []).map(n => ballHtml(n, kind)).join('');
+}
+
+function renderSmartTab() {
+  const container = el('#tab-smart');
+  if (!container) return;
+  const cfg = getLottoConfig(state.lottoType);
+  const analysis = state.resultsByType[state.lottoType];
+  const smart = state.smartByType[state.lottoType];
+
+  if (!analysis || !smart) {
+    container.innerHTML = `
+      <div class="smart-hero">
+        <div class="smart-hero__icon">✦</div>
+        <div><div class="smart-hero__title">智能彩引</div>
+        <div class="smart-hero__sub">先執行版路分析，系統會自動以歷史回測評分並嚴選下期推薦。</div></div>
+      </div>
+      <p class="empty-note">智能彩引會依目前選擇的版路，回測最近 5 個分析基準期，計算命中率、平均週期、連漏穩定度與反彈壓力，再產生最多 5 組下期推薦。</p>
+    `;
+    return;
+  }
+
+  if (smart.ok === false) {
+    container.innerHTML = `<p class="empty-note">智能彩引運算失敗：${escapeHtml(smart.error || '未知錯誤')}</p>`;
+    return;
+  }
+
+  const recs = smart.recommendations || [];
+  const verMap = new Map((smart.verification || []).map(v => [v.routeIndex, v]));
+  const verifyBadge = (routeIndex) => {
+    const v = verMap.get(routeIndex);
+    if (!v) return '<span class="smart-badge">待驗證</span>';
+    if (v.status === 'hit') return `<span class="smart-badge smart-badge--hit">🎉 命中${v.hitNums && v.hitNums.length ? ' ' + v.hitNums.map(n => String(n).padStart(2,'0')).join(' ') : ''}</span>`;
+    if (v.status === 'pending') return '<span class="smart-badge smart-badge--pending">⏳ 尚未開獎</span>';
+    return '<span class="smart-badge smart-badge--miss">💔 未命中</span>';
+  };
+
+  const recHtml = recs.length ? recs.map((r, idx) => `
+    <article class="smart-card">
+      <div class="smart-card__top">
+        <div class="smart-rank">${idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : '🎖️'} 第${idx + 1}選</div>
+        <div class="smart-score">${r.score.toFixed(1)} 分</div>
+      </div>
+      <div class="smart-card__nums">${smartBallHtml(r.predNums, r.isNonHit ? 'normal' : 'normal')}</div>
+      <div class="smart-card__meta">原第 ${r.routeIndex} 條 · 命中率 ${r.hitRatePct.toFixed(1)}% · 平均 ${r.avgInterval.toFixed(1)} 期開 1 次</div>
+      <div class="smart-card__meta">目前連漏 ${r.currentMiss} 期 · 歷史最多 ${r.maxMiss} 期</div>
+      <div class="smart-card__reason">${escapeHtml(r.reason)}</div>
+      <div class="smart-card__verify">${verifyBadge(r.routeIndex)}</div>
+    </article>
+  `).join('') : '<p class="empty-note">目前回測樣本不足，尚無法形成智能推薦。</p>';
+
+  container.innerHTML = `
+    <div class="smart-hero">
+      <div class="smart-hero__icon">✦</div>
+      <div><div class="smart-hero__title">智能彩引</div>
+      <div class="smart-hero__sub">${cfg.name} · ${analysis.modeName} · 歷史回測 ${smart.lookback} 期</div></div>
+    </div>
+    <div class="smart-summary">
+      <div class="smart-summary__item"><span>${recs.length}</span><small>嚴選推薦</small></div>
+      <div class="smart-summary__item"><span>${(smart.champions || []).length}</span><small>冠軍候選</small></div>
+      <div class="smart-summary__item"><span>${(smart.nextDraws || []).length}</span><small>可驗證期數</small></div>
+    </div>
+    <p class="section-label">🎯 AI 智能下期嚴選推薦</p>
+    <div class="smart-list">${recHtml}</div>
+    <p class="section-label">🏆 冠軍分析（沿用目前版路順序）</p>
+    <div class="result-list">
+      ${(smart.champions || []).map((r, i) => `<div class="result-card result-card--compact"><div><strong>第 ${i+1} 條</strong> · 原第 ${r.routeIndex} 條 · ${r.score.toFixed(1)} 分</div><div class="result-card__balls">${smartBallHtml(r.predNums)}</div><div class="smart-card__meta">命中率 ${r.hitRatePct.toFixed(1)}% · 目前連漏 ${r.currentMiss} 期</div></div>`).join('') || '<p class="empty-note">尚無冠軍候選。</p>'}
+    </div>
+  `;
+}
+
 function escapeHtml(str) {
   return String(str)
     .replace(/&/g, '&amp;')
@@ -340,6 +423,7 @@ function init() {
   renderDataTab();
   renderSettingsTab();
   renderResultsTab();
+  renderSmartTab();
   updateStatusBar();
 }
 

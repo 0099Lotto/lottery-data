@@ -249,6 +249,9 @@ function renderModeSpecificSettings(container) {
     };
     if(!state.modeSettings[state.lottoType]) state.modeSettings[state.lottoType]={};
     state.modeSettings[state.lottoType][mode]=saved;
+    const modeName = MODE_CONFIGS.find(m=>m.id===mode)?.name || '目前版路';
+    container.innerHTML = `<div class="mode-settings-collapsed"><span>✓ ${modeName}參數已設定</span><button type="button" class="setting-reopen-btn" id="modeSettingsReopen">重新開啟參數</button></div>`;
+    el('#modeSettingsReopen',container)?.addEventListener('click',()=>renderModeSpecificSettings(container));
     showToast('版路專屬參數已保存');
   });
 }
@@ -296,6 +299,18 @@ function getSegmentedIndex(groupName) {
 }
 
 // ---------- 執行分析(呼叫 Pyodide 引擎) ----------
+// GitHub Pages / Pyodide 的記憶體峰值比原生 Python 高。
+// 「全部」資料仍保留分析邏輯，但送進 WASM 時先限制在最近 1700 筆，
+// 與星辰路引的歷史資料爬取上限一致，避免 5965 筆造成 WASM 記憶體爆掉。
+function prepareWebAnalysisRows(data, limitDateISO) {
+  const safe = Array.isArray(data) ? data : [];
+  const idx = safe.findIndex(r => r.dateKey >= limitDateISO);
+  const cutoff = idx >= 0 ? idx : safe.length - 1;
+  const start = Math.max(0, cutoff - 1700);
+  const end = Math.min(safe.length, cutoff + 4);
+  return safe.slice(start, end).map(r => [r.dateKey, r.numbers, r.special]);
+}
+
 async function runAnalysisFlow() {
   const entry = currentEntry();
   if (!entry) { showToast('請先在「資料」分頁匯入開獎資料'); return; }
@@ -309,7 +324,7 @@ async function runAnalysisFlow() {
   const payload = {
     lottoType: state.lottoType,
     modeId: state.selectedMode,
-    rows: entry.data.map(r => [r.dateKey, r.numbers, r.special]),
+    rows: prepareWebAnalysisRows(entry.data, limitDateISO),
     predRangeIndex: getSegmentedIndex('predRange'),
     dataLimitIndex: getSegmentedIndex('dataLimit'),
     limitDateISO,

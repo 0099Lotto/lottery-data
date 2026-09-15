@@ -22,22 +22,18 @@ Python、把算出來的文字結果顯示出來。好處是核心運算邏輯�
 是同一份程式碼,不是重新猜寫的翻譯版本。
 
 代價:第一次使用網頁時,瀏覽器需要下載 Pyodide 執行環境(約數MB到十幾MB,
-視版本而定),之後會被瀏覽器快取。也因為要用 `fetch()` 讀取
-`py/lotto_engine.py`,**本機預覽必須透過 HTTP 伺服器開啟**,不能直接用
-瀏覽器打開 `index.html` 檔案(見下方「本機預覽」)。GitHub Pages 本身就是
-用 HTTP(S) 提供檔案,部署上去之後不受這個限制。
+視版本而定),之後會被瀏覽器快取。
 
-## 智能彩引融合
+**重要修正**:`index.html` 現在是**單一自足檔案**——CSS、JS、甚至整份
+Python 引擎原始碼都直接內嵌在檔案裡(引擎用 base64 編碼避免任何跳脫字元
+問題)。早期版本是 HTML 另外去讀取 `js/*.js`,結果在「直接雙擊打開」或
+某些預覽環境下,瀏覽器抓不到旁邊的檔案,外觀看起來正常但所有互動功能都
+會失效(參數設定是空的、按鈕沒反應)。改成單一檔案後,不管雙擊打開、丟到
+GitHub Pages,或任何靜態空間都能正常運作,不再需要額外跑本機伺服器。
 
-目前已把原「智能彩引」的核心分析流程移植到網頁版：
-
-- 分析完成後自動進入「智能彩引」分頁。
-- 以歷史基準期回測目前版路，計算命中率、平均週期、目前連漏、歷史最大連漏。
-- 沿用原 App 的評分公式，輸出 AI 智能下期前 5 名。
-- 提供「冠軍候選」與下期實際開獎驗證，支援一般號碼、尾數、不出號碼、立柱/星數、特殊天地碰等既有判定。
-- GitHub Pages 版本移除 iOS `ui` / `photos` 依賴，視覺及互動改由 HTML/CSS/JS 實作。
-
-為了瀏覽器效能，網頁版預設回測最近 5 個基準期；核心評分邏輯與原 App 冠軍分析相同。
+如果你想修改程式碼:實際原始碼分別放在 `css/style.css`、`js/*.js`、
+`py/lotto_engine.py`,改完後執行 `python3 build_single_file.py` 重新
+組裝出 `index.html`——不要直接改 `index.html` 本體,下次組裝會被覆蓋。
 
 ## 目前進度
 
@@ -86,32 +82,27 @@ Python、把算出來的文字結果顯示出來。好處是核心運算邏輯�
 
 ```
 xingchen-luyin/
-├── index.html            # 主頁面
-├── css/
-│   └── style.css         # 樣式(夜空版路主題)
+├── index.html               # ⭐ 真正要用的檔案:單一自足網頁,直接雙擊打開即可
+├── build_single_file.py     # 組裝腳本:把下面幾份原始碼組合成 index.html
+├── css/style.css            # 樣式原始碼(夜空版路主題)
 ├── js/
-│   ├── config.js         # 彩種設定、版路模式清單
-│   ├── dateUtils.js      # 日期解析、開獎日計算
-│   ├── dataLoader.js     # CSV 解析與驗證
-│   ├── engineBridge.js   # Pyodide 載入與 JS↔Python 橋接
-│   └── app.js            # 狀態管理、畫面渲染、事件綁定
-├── py/
-│   └── lotto_engine.py   # 從原始 App 整理出來的運算引擎(見上方說明)
+│   ├── config.js            # 彩種設定、版路模式清單
+│   ├── dateUtils.js         # 日期解析、開獎日計算
+│   ├── dataLoader.js        # CSV 解析與驗證
+│   ├── engineBridge.src.js  # Pyodide 載入與 JS↔Python 橋接
+│   └── app.js                # 狀態管理、畫面渲染、事件綁定
+├── py/lotto_engine.py       # 從原始 App 整理出來的運算引擎(見上方說明)
 └── README.md
 ```
 
+`css/`、`js/`、`py/` 底下是給人看、給人改的原始碼;`index.html` 才是
+真正要打開來用、要部署的檔案(已經把上面全部內容組裝進同一份自足檔案)。
+改了原始碼之後記得跑一次 `python3 build_single_file.py` 重新組裝。
+
 ## 本機預覽
 
-**必須透過 HTTP 伺服器開啟,不能直接雙擊打開 `index.html`** —— 網頁會用
-`fetch()` 讀取 `py/lotto_engine.py`,瀏覽器基於安全性限制,`file://`
-協定下大多會擋掉這個請求。在專案資料夾內執行:
-
-```bash
-python3 -m http.server 8000
-```
-
-再用瀏覽器開啟 `http://localhost:8000`。部署到 GitHub Pages 之後就不受
-這個限制,因為 GitHub Pages 本身就是用 HTTP(S) 提供檔案。
+直接用瀏覽器打開 `index.html` 就可以(雙擊,或拖進瀏覽器視窗)。因為是
+單一自足檔案,不需要跑本機伺服器。
 
 ## 部署到 GitHub Pages
 

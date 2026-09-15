@@ -26,6 +26,11 @@ ANALYSIS_DATA_LIMIT_OPTIONS = {
     2: DATA_READ_LIMIT,
     3: None,
 }
+# GitHub Pages / Pyodide 安全上限。原生 App 可使用更大歷史資料，
+# 但瀏覽器 WASM 會同時持有 JSON、Python list、索引與分析暫存，
+# 5965 筆容易造成 Out of bounds memory access。
+WEB_ALL_DATA_LIMIT = 1700
+WEB_SMART_DATA_LIMIT = 231
 CHART_ROWS = 60
 CHART_COLS = 4
 CHART_DISPLAY_LIMIT = 231
@@ -7231,6 +7236,9 @@ def run_analysis_json(payload_json):
         payload = _json.loads(payload_json)
         eng = LottoEngine(lotto_type=payload['lottoType'])
         rows = [(r[0], r[1], r[2]) for r in payload['rows']]
+        # 前端已做一次保護，這裡再做後端防線，避免任何呼叫路徑把 5965 筆整包灌入 WASM。
+        if len(rows) > WEB_ALL_DATA_LIMIT:
+            rows = rows[-WEB_ALL_DATA_LIMIT:]
         eng.set_data(rows)
 
         mode_id = payload['modeId']
@@ -7271,14 +7279,31 @@ def run_analysis_json(payload_json):
 
         smart = {'ok': True, 'recommendations': [], 'champions': [], 'verification': [], 'nextDraws': [], 'lookback': 0}
         if payload.get('smartEnabled', True):
+            original_data = eng.data
             try:
+                # 智能彩引的歷史評分會重跑多次分析。這裡只取最近 231 筆作為回測基礎，
+                # 大幅降低 WASM 峰值記憶體，同時保留目前分析的完整結果與下期驗證。
+                if len(original_data) > WEB_SMART_DATA_LIMIT:
+                    eng.data = original_data[-WEB_SMART_DATA_LIMIT:]
+                # 清掉上一輪分析暫存，避免多次回測把同一批大型索引留在記憶體。
+                eng._analysis_cache = {}
+                eng._analysis_result_cache = {}
                 smart = run_smart_recommendation(
                     eng, top_list, params, limit_date,
-                    lookback=payload.get('smartLookback', 20),
+                    lookback=payload.get('smartLookback', 5),
                     target_count=payload.get('smartTargetCount', 5),
                 )
             except Exception as smart_err:
                 smart = {'ok': False, 'error': f'{type(smart_err).__name__}: {smart_err}', 'recommendations': [], 'champions': [], 'verification': [], 'nextDraws': [], 'lookback': 0}
+            finally:
+                eng.data = original_data
+                eng._analysis_cache = {}
+                eng._analysis_result_cache = {}
+                try:
+                    import gc
+                    gc.collect()
+                except Exception:
+                    pass
 
         return _json.dumps({
             'ok': True,

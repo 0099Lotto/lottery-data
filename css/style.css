@@ -375,3 +375,30 @@ button:focus-visible, input:focus-visible, label:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
 }
+
+
+/* ---------- Smart Guide ---------- */
+.smart-hero { display:flex; align-items:center; gap:12px; padding:14px 16px; margin-bottom:12px; border:1px solid var(--star-gold-soft); border-radius:var(--radius); background:linear-gradient(135deg, rgba(232,184,75,.10), rgba(111,168,201,.08)); }
+.smart-hero__icon { width:42px; height:42px; border-radius:50%; display:grid; place-items:center; border:1px solid var(--star-gold); color:var(--star-gold); font-size:22px; }
+.smart-hero__title { font-size:18px; font-weight:700; color:var(--ink); }
+.smart-hero__sub { margin-top:3px; font-size:12px; color:var(--ink-dim); line-height:1.5; }
+.smart-summary { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin:12px 0 18px; }
+.smart-summary__item { background:var(--nebula); border:1px solid var(--line); border-radius:12px; padding:10px; text-align:center; }
+.smart-summary__item span { display:block; font-size:20px; font-weight:700; font-variant-numeric:tabular-nums; }
+.smart-summary__item small { display:block; color:var(--ink-dim); font-size:11px; margin-top:3px; }
+.smart-list { display:flex; flex-direction:column; gap:10px; }
+.smart-card { position:relative; background:var(--nebula); border:1px solid var(--line); border-radius:var(--radius); padding:13px 14px; overflow:hidden; }
+.smart-card:first-child { border-color:var(--star-gold-soft); }
+.smart-card__top { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+.smart-rank { font-size:14px; font-weight:600; }
+.smart-score { color:var(--star-gold); font-size:14px; font-weight:700; }
+.smart-card__nums { display:flex; gap:6px; flex-wrap:wrap; margin:11px 0 8px; }
+.smart-card__meta { color:var(--ink-dim); font-size:11.5px; line-height:1.55; }
+.smart-card__reason { margin-top:7px; font-size:12.5px; line-height:1.6; }
+.smart-card__verify { margin-top:8px; }
+.smart-badge { display:inline-block; padding:4px 8px; border-radius:999px; background:var(--void-2); border:1px solid var(--line); font-size:11px; }
+.smart-badge--hit { border-color:rgba(89,190,112,.5); }
+.smart-badge--pending { border-color:rgba(232,184,75,.45); }
+.smart-badge--miss { border-color:rgba(214,91,74,.45); }
+.result-card--compact { gap:7px; }
+@media (max-width:430px) { .smart-summary { grid-template-columns:repeat(3,1fr); } .smart-summary__item span { font-size:18px; } }
